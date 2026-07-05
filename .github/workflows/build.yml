@@ -1,0 +1,74 @@
+name: Build and Release
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag for manual release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET with Cache
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        cache: true
+        cache-dependency-path: '**/pushover-winui3.csproj'
+
+    - name: Publish WinUI 3 App
+      run: 'dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -p:PublishReadyToRun=false'
+    - name: Copy All XBF Components
+      shell: pwsh
+      run: |
+        $sourceDir = (Get-Item ".\obj\Release\net9.0-windows10.0.26100.0\win-x64").FullName
+        $targetDir = (Get-Item ".\bin\Release\net9.0-windows10.0.26100.0\win-x64\publish").FullName
+
+        Get-ChildItem -Path $sourceDir -Filter "*.xbf" -Recurse | ForEach-Object {
+          if ($_.Name -eq "App.xbf") {
+                Write-Host "Skipping application resource: $($_.Name)"
+                return
+            }
+
+            $relativePath = $_.FullName.Substring($sourceDir.Length + 1)
+            $destinationPath = Join-Path -Path $targetDir -ChildPath $relativePath
+
+            $parentDir = Split-Path -Path $destinationPath -Parent
+            if (!(Test-Path -Path $parentDir)) {
+                New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+            }
+
+            Copy-Item -Path $_.FullName -Destination $destinationPath -Force
+            Write-Host "Copy: $($_.Name) -> $destinationPath"
+        }
+
+    - name: Create Clean ZIP
+      shell: pwsh
+      run: |
+        Compress-Archive -Path .\bin\Release\net9.0-windows10.0.26100.0\win-x64\publish\* -DestinationPath .\PushoverDesktopClient-Windows.zip
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PushoverDesktopClient-Windows-Raw
+        path: '**/bin/Release/net9.0-windows*/*/publish/'
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: .\PushoverDesktopClient-Windows.zip
+        tag_name: ${{ github.event.inputs.version || github.ref_name }}
+        name: ${{ github.event.inputs.version || github.ref_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
