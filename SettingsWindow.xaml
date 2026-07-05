@@ -1,0 +1,25 @@
+<Window
+    x:Class="PushoverDesktopClient.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:PushoverDesktopClient"
+    Title="Settings">
+
+    <Grid Background="#1C1C1C" Padding="24">
+        <StackPanel Spacing="16" MaxWidth="400" HorizontalAlignment="Left">
+            <TextBlock Text="Settings" FontSize="24" FontWeight="Bold" Foreground="White" />
+
+            <TextBlock Text="Pushover Credentials" FontSize="16" FontWeight="SemiBold" Foreground="Gray" Margin="0,8,0,0" />
+            <TextBox x:Name="EmailBox" Header="Email Address" PlaceholderText="Enter your Pushover email" HorizontalAlignment="Stretch" />
+            <PasswordBox x:Name="PasswordBox" Header="Password" PlaceholderText="Enter your Pushover password" PasswordChar="*" HorizontalAlignment="Stretch" />
+
+            <TextBlock Text="Preferences" FontSize="16" FontWeight="SemiBold" Foreground="Gray" Margin="0,8,0,0" />
+            <ToggleSwitch x:Name="RelativeTimeToggle" Header="Use Relative Timestamp" OffContent="Absolute (HH:mm)" OnContent="Relative (e.g., 5 minutes ago)" />
+
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,24,0,0" HorizontalAlignment="Right">
+                <Button Content="Save" Style="{StaticResource AccentButtonStyle}" Click="Save_Click" Width="100" />
+                <Button Content="Cancel" Click="Cancel_Click" Width="100" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>
