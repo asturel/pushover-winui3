@@ -115,7 +115,7 @@ public class PushoverWebSocketService
         }
     }
 
-    private async Task ProcessControlCharAsync(char controlChar)
+    private Task ProcessControlCharAsync(char controlChar)
     {
         switch (controlChar)
         {
@@ -133,6 +133,7 @@ public class PushoverWebSocketService
                 Log($"Unknown single-byte control frame received: {controlChar}");
                 break;
         }
+        return Task.CompletedTask;
     }
 
     private async Task ProcessRawFrameAsync(string frame)
