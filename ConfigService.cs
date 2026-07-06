@@ -31,7 +31,10 @@ public class ConfigService : IConfigService
                 Current = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
                 return;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load config: {ex.Message}");
+            }
         }
         Current = new AppConfig();
     }
@@ -54,5 +57,5 @@ public class ConfigService : IConfigService
 public class AppConfig
 {
     public PushoverCredentials Pushover { get; set; } = new();
-    public bool UseRelativeTime { get; set; } = false; // Directly inside the serializable model
+    public bool UseRelativeTime { get; set; } = false;
 }
