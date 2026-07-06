@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace PushoverDesktopClient;
 
@@ -13,27 +14,22 @@ public interface IConfigService
 public class ConfigService : IConfigService
 {
     private readonly string _configFilePath;
+    private readonly IOptionsMonitor<AppConfig> _options;
+
     public AppConfig Current { get; private set; } = null!;
 
-    public ConfigService()
+    public ConfigService(IOptionsMonitor<AppConfig> options)
     {
+        _options = options;
         _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-        Load();
-    }
+        Current = _options.CurrentValue ?? new AppConfig();
 
-    private void Load()
-    {
-        if (File.Exists(_configFilePath))
+        // When configuration reloads this will update Current automatically
+        _options.OnChange(newVal =>
         {
-            try
-            {
-                string json = File.ReadAllText(_configFilePath);
-                Current = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
-                return;
-            }
-            catch { }
-        }
-        Current = new AppConfig();
+            Current = newVal ?? new AppConfig();
+            App.NotifyConfigChanged();
+        });
     }
 
     public void Save(AppConfig config)
@@ -43,11 +39,17 @@ public class ConfigService : IConfigService
         {
             string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_configFilePath, json);
+
+            // The Host's configuration should be configured with reloadOnChange = true so writing the file
+            // will cause the IConfiguration to reload and trigger IOptionsMonitor.OnChange above.
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to save config: {ex.Message}");
         }
+
+        // Notify legacy static subscribers
+        App.NotifyConfigChanged();
     }
 }
 
