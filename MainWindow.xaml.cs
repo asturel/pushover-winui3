@@ -34,7 +34,7 @@ public sealed partial class MainWindow : Window
     private string _currentSearchQuery = string.Empty;
 
     private readonly string _configFilePath;
-    private readonly string _cacheFilePath;
+    private readonly string _cache_file_path;
     private readonly IServiceProvider _services;
 
     public MainWindow(IMessageStorage storage, IServiceProvider services)
@@ -52,10 +52,10 @@ public sealed partial class MainWindow : Window
         _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
         string appDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PushoverDesktopClient");
         Directory.CreateDirectory(appDataFolder);
-        _cacheFilePath = Path.Combine(appDataFolder, "deviceid_cache.json");
+        _cache_file_path = Path.Combine(appDataFolder, "deviceid_cache.json");
 
         AddLogLine($"[UI] Target config path: {_configFilePath}");
-        AddLogLine($"[UI] Secure token storage path: {_cacheFilePath}");
+        AddLogLine($"[UI] Secure token storage path: {_cache_file_path}");
 
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
@@ -75,8 +75,8 @@ public sealed partial class MainWindow : Window
 
         // Start timer to refresh the "X minutes ago" labels every minute
         _timeRefreshTimer = new DispatcherTimer();
-        _timeRefreshTimer.Interval = TimeSpan.FromMinutes(1);
-        _timeRefreshTimer.Tick += (s, e) =>
+        _timeRefresh_timer.Interval = TimeSpan.FromMinutes(1);
+        _timeRefresh_timer.Tick += (s, e) =>
         {
             if (App.Config.Current.UseRelativeTime)
             {
@@ -84,7 +84,7 @@ public sealed partial class MainWindow : Window
             }
             RemoveExpiredMessages();
         };
-        _timeRefreshTimer.Start();
+        _timeRefresh_timer.Start();
 
         // Subscribe to settings window save event
         App.ConfigChanged += () =>
@@ -94,23 +94,21 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    // ... rest of MainWindow remains unchanged except where _storage or _wsService created
+    // keep remaining methods unchanged (DeleteButton_Click, ApplyFiltering, etc.)
 
     private void StartClient_Internal(string deviceId, string secret)
     {
         _cts?.Cancel();
         // Acquire singleton websocket service from DI
-        _ws_service = _services.GetRequiredService<PushoverWebSocketService>();
-        _ws_service.OnLog += (s, msg) => AddLogLine(msg);
+        _wsService = _services.GetRequiredService<PushoverWebSocketService>();
+        _wsService.OnLog += (s, msg) => AddLogLine(msg);
         _ws_service.OnMessageReceived += (s, args) =>
         {
             AddMessageCard(args, isHistory: false);
         };
 
         _cts = new CancellationTokenSource();
-        Task.Run(() => _ws_service.StartAsync(deviceId, secret, _cts.Token));
+        Task.Run(() => _wsService.StartAsync(deviceId, secret, _cts.Token));
         AddLogLine("[Client] Persistent WebSocket stream established using cached endpoint profile.");
     }
-
-    // keep remaining methods unchanged (DeleteButton_Click, ApplyFiltering, etc.)
 }

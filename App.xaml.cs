@@ -14,7 +14,8 @@ public delegate void ConfigChangedEventHandler();
 
 public partial class App : Application
 {
-    public static IHost Host { get; private set; } = CreateHostBuilder().Build();
+    // Renamed Instance to avoid shadowing the Microsoft.Extensions.Hosting.Host static type
+    public static IHost Instance { get; private set; } = CreateHostBuilder().Build();
     public static IConfigService Config { get; private set; } = null!;
     public static MainWindow? CurrentMainWindow { get; private set; }
 
@@ -36,10 +37,10 @@ public partial class App : Application
         this.InitializeComponent();
 
         // Start the host so services are available
-        Host.Start();
+        Instance.Start();
 
         // Resolve config service from DI
-        Config = Host.Services.GetRequiredService<IConfigService>();
+        Config = Instance.Services.GetRequiredService<IConfigService>();
 
         // Register with Windows Toast Notification platform and wire up click handler
         AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked;
@@ -48,7 +49,8 @@ public partial class App : Application
 
     private static IHostBuilder CreateHostBuilder()
     {
-        return Host.CreateDefaultBuilder()
+        // Use the fully qualified Host to avoid name collision with the Instance property
+        return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
             .ConfigureAppConfiguration((context, builder) =>
             {
                 // Ensure appsettings.json from output is loaded and supports reloadOnChange
@@ -57,6 +59,7 @@ public partial class App : Application
             .ConfigureServices((context, services) =>
             {
                 // Core app services
+                services.AddOptions<AppConfig>().Bind(context.Configuration.GetSection("AppConfig"));
                 services.AddSingleton<IConfigService, ConfigService>();
 
                 // Message store: keep Sqlite as requested
@@ -85,7 +88,7 @@ public partial class App : Application
         try
         {
             // Resolve the MainWindow from DI (this ensures its ctor gets injected dependencies)
-            CurrentMainWindow = Host.Services.GetRequiredService<MainWindow>();
+            CurrentMainWindow = Instance.Services.GetRequiredService<MainWindow>();
             CurrentMainWindow.Activate();
 
             CurrentMainWindow.Closed += (sender, e) =>

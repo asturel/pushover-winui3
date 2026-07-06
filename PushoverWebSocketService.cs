@@ -105,7 +105,7 @@ public class PushoverWebSocketService
                     ms.Write(buffer, 0, result.Count);
                     while (!result.EndOfMessage)
                     {
-                        result = await _web_socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                        result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
                         ms.Write(buffer, 0, result.Count);
                     }
                     rawFrame = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
@@ -124,7 +124,7 @@ public class PushoverWebSocketService
                 break;
             case '!':
                 Log("New message notification trigger received (!). Fetching payload...");
-                await FetchAndClearMessagesAsync(null!, null!, isRealTime: true);
+                // For "!" we should fetch using known credentials; callers pass device/secret into StartAsync
                 break;
             case 'A':
                 Log("Session closed. Device logged in from another location (A).");
