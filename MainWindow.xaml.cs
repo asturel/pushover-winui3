@@ -717,4 +717,105 @@ public sealed partial class MainWindow : Window
         Task.Run(() => _wsService.StartAsync(deviceId, secret, _cts.Token));
         AddLogLine("[Client] Persistent WebSocket stream established using cached endpoint profile.");
     }
+
+    private void SimulateNotification_Click(object sender, RoutedEventArgs e)
+    {
+        AddMessageCard(new PushoverMessageEventArgs
+        {
+            Id = 0,
+            Title = "Production Cluster Node Critical Link Failure",
+            Message = "Core network path dropped interface packet state metrics. Check pipeline visualization graph.",
+            Application = "Grafana",
+            IconUrl = "pushover",
+            Date = DateTime.Now,
+            IsRealTime = true,
+            Url = "https://github.com",
+            UrlTitle = "Open GitHub Pipeline"
+        });
+        AddLogLine("[Simulate] Injected active hypermedia verification template into UI display queue.");
+    }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var settingsWin = new SettingsWindow();
+        settingsWin.Activate();
+    }
+
+    private string GetRelativeTimeString(DateTime dateTime)
+    {
+        var span = DateTime.Now - dateTime;
+        if (span.TotalDays >= 365) return $"{(int)(span.TotalDays / 365)}y ago";
+        if (span.TotalDays >= 30) return $"{(int)(span.TotalDays / 30)}mo ago";
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d ago";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalMinutes >= 1) return $"{(int)span.TotalMinutes}m ago";
+        return "just now";
+    }
+
+    private FrameworkElement? FindVisualChildByName(DependencyObject obj, string name)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
+        {
+            var child = VisualTreeHelper.GetChild(obj, i);
+            if (child is FrameworkElement fe && fe.Name == name)
+                return fe;
+
+            var result = FindVisualChildByName(child, name);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    // Updates timestamps directly on visible UI elements without touching the collection
+    private void RefreshVisibleTimestamps()
+    {
+        foreach (var item in DisplayedMessages)
+        {
+            var container = MessagesListView.ContainerFromItem(item) as ListViewItem;
+            if (container != null)
+            {
+                var timeTextBlock = FindVisualChildByName(container, "TimeTextBlock") as TextBlock;
+                if (timeTextBlock != null)
+                {
+                    timeTextBlock.Text = App.Config.Current.UseRelativeTime
+                        ? GetRelativeTimeString(item.Date)
+                        : item.Date.ToString("HH:mm");
+                }
+            }
+        }
+    }
+
+    private void RemoveExpiredMessages()
+    {
+        var now = DateTime.Now;
+        var expiredItems = new List<PushoverMessageEventArgs>();
+
+        // 1. Identify expired items under lock
+        lock (_lockObj)
+        {
+            foreach (var item in _allMessages)
+            {
+                if (item.ExpirationDate.HasValue && item.ExpirationDate < now)
+                {
+                    expiredItems.Add(item);
+                }
+            }
+
+            // Remove from the master background list
+            foreach (var item in expiredItems)
+            {
+                // _allMessages.Remove(item);
+            }
+        }
+
+        // 2. Remove from the UI collection (must run on UI thread)
+        // This triggers the native ListView item removal animation smoothly
+        foreach (var item in expiredItems)
+        {
+            if (DisplayedMessages.Contains(item))
+            {
+                DisplayedMessages.Remove(item);
+            }
+        }
+    }
 }
