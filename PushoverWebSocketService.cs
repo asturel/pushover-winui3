@@ -5,12 +5,16 @@ using System.Text.Json;
 
 namespace PushoverDesktopClient;
 
-// ==========================================
-// PUSHOVER WEBSOCKET SERVICE
-// ==========================================
+/// <summary>
+/// WebSocket service for real-time Pushover message streaming.
+/// Maintains persistent connection to Pushover servers and handles message synchronization.
+/// </summary>
 public class PushoverWebSocketService
 {
     private const string WsUrl = "wss://client.pushover.net/push";
+    private const int ReceiveBufferSize = 1024;
+    private const int ReconnectDelayMs = 5000;
+
     private readonly string _deviceId;
     private readonly string _secret;
     private ClientWebSocket? _webSocket;
@@ -55,8 +59,8 @@ public class PushoverWebSocketService
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
-                Log($"Connection error: {ex.Message}. Retrying in 5 seconds...");
-                await Task.Delay(5000, cancellationToken);
+                Log($"Connection error: {ex.Message}. Retrying in {ReconnectDelayMs}ms...");
+                await Task.Delay(ReconnectDelayMs, cancellationToken);
             }
             finally
             {
@@ -69,6 +73,7 @@ public class PushoverWebSocketService
     private async Task AuthenticateAsync(CancellationToken cancellationToken)
     {
         if (_webSocket == null) return;
+        
         string authPayload = $"login:{_deviceId}:{_secret}\n";
         byte[] bytes = Encoding.UTF8.GetBytes(authPayload);
 
@@ -82,8 +87,7 @@ public class PushoverWebSocketService
 
     private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
     {
-        // 1KB buffer is plenty since Pushover control frames are only a few bytes
-        var buffer = new byte[1024];
+        var buffer = new byte[ReceiveBufferSize];
 
         while (_webSocket?.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
         {
@@ -130,7 +134,9 @@ public class PushoverWebSocketService
         }
     }
 
-    // Fast path for the most common 1-byte frames (Zero-allocation)
+    /// <summary>
+    /// Fast path for the most common 1-byte frames (Zero-allocation)
+    /// </summary>
     private async Task ProcessControlCharAsync(char controlChar)
     {
         switch (controlChar)
@@ -151,7 +157,9 @@ public class PushoverWebSocketService
         }
     }
 
-    // Slow path for text-based or complex frames (e.g., error messages)
+    /// <summary>
+    /// Slow path for text-based or complex frames (e.g., error messages)
+    /// </summary>
     private async Task ProcessRawFrameAsync(string frame)
     {
         if (string.IsNullOrWhiteSpace(frame)) return;
@@ -207,12 +215,10 @@ public class PushoverWebSocketService
                 var pushoverMessageEventArgs = new PushoverMessageEventArgs
                 {
                     Id = msg.Id,
-                    //Title = !string.IsNullOrEmpty(msg.title) ? msg.title : msg.app,
                     Title = msg.Title,
                     Message = msg.Message,
                     Application = msg.Application,
                     Priority = msg.Priority,
-                    //Ttl = msg.Ttl,
                     Url = msg.Url,
                     UrlTitle = msg.UrlTitle,
                     IconUrl = msg.Icon,
