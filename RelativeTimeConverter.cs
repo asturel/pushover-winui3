@@ -17,11 +17,8 @@ public class RelativeTimeConverter : IValueConverter
             if (span.TotalMinutes >= 1) return $"{(int)span.TotalMinutes}m ago";
             return "just now";
         }
-        return string.Empty;
+        return value ?? string.Empty;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, string language)
-    {
-        throw new NotImplementedException();
-    }
+    public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
 }
