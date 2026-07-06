@@ -44,12 +44,6 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         this.InitializeComponent();
-        App.ConfigChanged += () =>
-        {
-            // Immediately refresh the list so the Converter runs again with the new format
-            ApplyFiltering();
-        };
-
         _storage = new SqliteMessageStorage();
 
         _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
@@ -60,6 +54,9 @@ public sealed partial class MainWindow : Window
         AddLogLine($"[UI] Target config path: {_configFilePath}");
         AddLogLine($"[UI] Secure token storage path: {_cacheFilePath}");
 
+        // Subscribe to settings window save event
+        App.ConfigChanged += OnConfigChanged;
+
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             var messages = _storage.LoadAllMessages();
@@ -67,7 +64,6 @@ public sealed partial class MainWindow : Window
             {
                 AddMessageCard(m, isHistory: true);
             }
-
         });
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
@@ -83,18 +79,17 @@ public sealed partial class MainWindow : Window
         {
             if (App.Config.Current.UseRelativeTime)
             {
-                RefreshVisibleTimestamps(); // Recalculate time values, scroll position doesn't jump due to UI layout preservation!
+                RefreshVisibleTimestamps();
             }
             RemoveExpiredMessages();
         };
         _timeRefreshTimer.Start();
+    }
 
-        // Subscribe to settings window save event
-        App.ConfigChanged += () =>
-        {
-            ApplyFiltering(); // If we saved, immediately switch the format
-            RefreshVisibleTimestamps(); // Recalculate time values, scroll position doesn't jump due to UI layout preservation!
-        };
+    private void OnConfigChanged()
+    {
+        ApplyFiltering();
+        RefreshVisibleTimestamps();
     }
 
     private void SetWindowIcon()
@@ -135,11 +130,6 @@ public sealed partial class MainWindow : Window
         {
             NotificationHelper.ShowToast(msg.Title ?? msg.Message.Substring(0, Math.Min(100, msg.Message.Length)), msg.Message, msg.Application, msg.Url, msg.IconUrl, msg.Priority <= 0);
         }
-        if (msg.ExpirationDate < DateTime.Now)
-        {
-            //AddLogLine($"[UI] Skipping expired message: {msg.Title} (ID: {msg.Id})");
-            //return;
-        }
 
         this.DispatcherQueue.TryEnqueue(() =>
         {
@@ -158,7 +148,6 @@ public sealed partial class MainWindow : Window
 
                 var btnContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
                 var appIconImg = new Image { Width = 20, Height = 20 };
-                //string appIconImgUrl = $"https://pushover.net/icons/{msg.IconUrl}.png";
                 string appIconImgUrl = msg.IconUrl;
                 appIconImg.Source = new BitmapImage(new Uri(appIconImgUrl));
 
@@ -193,9 +182,6 @@ public sealed partial class MainWindow : Window
             lock (_lockObj)
             {
                 _allMessages.Add(msg);
-                //_allMessages.RemoveAll(m => m.Ttl > 0 && m.Date.AddSeconds(m.Ttl) < DateTime.Now);
-                //_allMessages.RemoveAll(m => m.ExpirationDate < DateTime.Now);
-                //_allMessages.Sort((a, b) => b.Date.CompareTo(a.Date));
                 _allMessages.Sort((a, b) =>
                 {
                     int dateCompare = b.Date.CompareTo(a.Date);
@@ -206,7 +192,6 @@ public sealed partial class MainWindow : Window
 
                     return string.Compare(b.Message, a.Message, StringComparison.Ordinal);
                 });
-                //_allMessages = _allMessages.Where(m => m.Date.AddSeconds(m.Ttl) > DateTime.Now).ToList();
             }
 
             ApplyFiltering();
@@ -225,43 +210,6 @@ public sealed partial class MainWindow : Window
         return null;
     }
 
-    private void ApplyFilteringOLD()
-    {
-        var scrollViewer = GetScrollViewer(MessagesListView);
-        double verticalOffset = scrollViewer?.VerticalOffset ?? 0;
-        var query = _currentSearchQuery.Trim().ToLower();
-        var filteredList = new List<PushoverMessageEventArgs>();
-
-        lock (_lockObj)
-        {
-            foreach (var msg in _allMessages)
-            {
-                if (_currentAppFilter != "All" && !msg.Application.Equals(_currentAppFilter, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!string.IsNullOrEmpty(query))
-                {
-                    bool match = msg.Application.ToLower().Contains(query) == true ||
-                                 msg.Title?.ToLower().Contains(query) == true ||
-                                 msg.Message.ToLower().Contains(query) == true;
-                    if (!match) continue;
-                }
-
-                filteredList.Add(msg);
-            }
-        }
-
-        DisplayedMessages.Clear();
-        foreach (var msg in filteredList)
-        {
-            DisplayedMessages.Add(msg);
-        }
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            scrollViewer?.ChangeView(null, verticalOffset, null);
-        });
-    }
-
     private void ApplyFiltering(bool clear = false)
     {
         var scrollViewer = GetScrollViewer(MessagesListView);
@@ -278,15 +226,16 @@ public sealed partial class MainWindow : Window
 
                 if (!string.IsNullOrEmpty(query))
                 {
-                    bool match = msg.Application.ToLower().Contains(query) == true ||
+                    bool match = msg.Application.ToLower().Contains(query) ||
                                  msg.Title?.ToLower().Contains(query) == true ||
-                                 msg.Message.ToLower().Contains(query) == true;
+                                 msg.Message.ToLower().Contains(query);
                     if (!match) continue;
                 }
 
                 filteredList.Add(msg);
             }
         }
+        
         if (clear)
         {
             DisplayedMessages.Clear();
@@ -343,69 +292,6 @@ public sealed partial class MainWindow : Window
             scrollViewer?.ChangeView(null, verticalOffset, null);
         });
     }
-    private void ApplyFilteringS()
-    {
-        var scrollViewer = GetScrollViewer(MessagesListView);
-        double verticalOffset = scrollViewer?.VerticalOffset ?? 0;
-        var query = _currentSearchQuery.Trim().ToLower();
-        var filteredList = new List<PushoverMessageEventArgs>();
-
-        lock (_lockObj)
-        {
-            foreach (var msg in _allMessages)
-            {
-                if (_currentAppFilter != "All" && !msg.Application.Equals(_currentAppFilter, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!string.IsNullOrEmpty(query))
-                {
-                    bool match = msg.Application.ToLower().Contains(query) == true ||
-                                 msg.Title?.ToLower().Contains(query) == true ||
-                                 msg.Message.ToLower().Contains(query) == true;
-                    if (!match) continue;
-                }
-
-                filteredList.Add(msg);
-            }
-        }
-
-        // SMART SYNC: Incremental updates instead of Clear() + Add() loop to prevent layout jumps and crashes
-        for (int i = DisplayedMessages.Count - 1; i >= 0; i--)
-        {
-            if (!filteredList.Contains(DisplayedMessages[i]))
-            {
-                DisplayedMessages.RemoveAt(i);
-            }
-        }
-
-        for (int i = 0; i < filteredList.Count; i++)
-        {
-            var item = filteredList[i];
-            if (i >= DisplayedMessages.Count)
-            {
-                DisplayedMessages.Add(item);
-            }
-            else if (DisplayedMessages[i] != item)
-            {
-                int oldIndex = DisplayedMessages.IndexOf(item);
-                if (oldIndex >= 0)
-                {
-                    DisplayedMessages.Move(oldIndex, i);
-                }
-                else
-                {
-                    DisplayedMessages.Insert(i, item);
-                }
-            }
-        }
-
-        RefreshVisibleTimestamps();
-
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            scrollViewer?.ChangeView(null, verticalOffset, null);
-        });
-    }
 
     private void MessagesListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
@@ -441,7 +327,6 @@ public sealed partial class MainWindow : Window
             {
                 appIconImage.Visibility = Visibility.Visible;
                 fallbackTextBlock.Visibility = Visibility.Collapsed;
-                //appIconImage.Source = new BitmapImage(new Uri($"https://pushover.net/icons/{msg.IconUrl}.png"));
                 appIconImage.Source = new BitmapImage(new Uri(msg.IconUrl));
                 appIconImage.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, 32, 32) };
             }
@@ -468,7 +353,11 @@ public sealed partial class MainWindow : Window
                     hyperlinkButton.NavigateUri = new Uri(msg.Url);
                     hyperlinkButton.Content = !string.IsNullOrWhiteSpace(msg.UrlTitle) ? msg.UrlTitle : msg.Url;
                 }
-                catch { hyperlinkButton.Visibility = Visibility.Collapsed; }
+                catch (Exception ex)
+                {
+                    AddLogLine($"[UI] Failed to set hyperlink: {ex.Message}");
+                    hyperlinkButton.Visibility = Visibility.Collapsed;
+                }
             }
             else
             {
@@ -478,7 +367,6 @@ public sealed partial class MainWindow : Window
 
         if (timeTextBlock != null)
         {
-            //timeTextBlock.Text = msg.Date.ToString("HH:mm");
             timeTextBlock.Text = App.Config.Current.UseRelativeTime
                 ? GetRelativeTimeString(msg.Date)
                 : msg.Date.ToString("HH:mm");
@@ -608,9 +496,9 @@ public sealed partial class MainWindow : Window
                         secret = cacheTokens.Secret;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    AddLogLine("[Cache] Failed to read corrupted token cache file. Re-authenticating...");
+                    AddLogLine($"[Cache] Failed to read corrupted token cache file: {ex.Message}. Re-authenticating...");
                 }
             }
 
@@ -702,20 +590,6 @@ public sealed partial class MainWindow : Window
         _wsService.OnLog += (s, msg) => AddLogLine(msg);
         _wsService.OnMessageReceived += (s, args) =>
         {
-            /*
-            var msg = new PushoverMessageEventArgs
-            {
-                Id = args.Id,
-                Title = !string.IsNullOrEmpty(args.Title) ? args.Title : args.Application,
-                Message = args.Message,
-                Application = args.Application,
-                IconUrl = args.IconUrl,
-                Date = args.Date,
-                IsRealTime = args.IsRealTime,
-                Url = args.Url,
-                UrlTitle = args.UrlTitle
-            };
-            */
             AddMessageCard(args, isHistory: false);
         };
 
@@ -757,6 +631,7 @@ public sealed partial class MainWindow : Window
         if (span.TotalMinutes >= 1) return $"{(int)span.TotalMinutes}m ago";
         return "just now";
     }
+
     private FrameworkElement? FindVisualChildByName(DependencyObject obj, string name)
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
@@ -771,7 +646,6 @@ public sealed partial class MainWindow : Window
         return null;
     }
 
-    // Updates timestamps directly on visible UI elements without touching the collection
     private void RefreshVisibleTimestamps()
     {
         foreach (var item in DisplayedMessages)
@@ -789,12 +663,12 @@ public sealed partial class MainWindow : Window
             }
         }
     }
+
     private void RemoveExpiredMessages()
     {
         var now = DateTime.Now;
         var expiredItems = new List<PushoverMessageEventArgs>();
 
-        // 1. Identify expired items under lock
         lock (_lockObj)
         {
             foreach (var item in _allMessages)
@@ -804,16 +678,8 @@ public sealed partial class MainWindow : Window
                     expiredItems.Add(item);
                 }
             }
-
-            // Remove from the master background list
-            foreach (var item in expiredItems)
-            {
-                // _allMessages.Remove(item);
-            }
         }
 
-        // 2. Remove from the UI collection (must run on UI thread)
-        // This triggers the native ListView item removal animation smoothly
         foreach (var item in expiredItems)
         {
             if (DisplayedMessages.Contains(item))
