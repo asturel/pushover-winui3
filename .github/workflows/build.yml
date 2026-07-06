@@ -1,7 +1,9 @@
 name: Build and Release
 on:
   push:
-    branches: [ master, main ]
+    branches:
+      - '*'
+      
     tags:
       - 'v*'
   workflow_dispatch:
